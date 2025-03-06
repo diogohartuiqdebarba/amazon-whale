@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Whale's Journey: Ocean to Amazon - Multiplayer</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #87CEEB;
+            font-family: Arial, sans-serif;
+        }
+
+        #gameCanvas {
+            display: block;
+        }
+
+        #gameInfo {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        #startScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 100, 0.7);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+        }
+
+        #startButton {
+            padding: 15px 30px;
+            font-size: 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+
+        #gameOverScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(100, 0, 0, 0.7);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+        }
+
+        #restartButton {
+            padding: 15px 30px;
+            font-size: 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+
+        #winScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 100, 0, 0.7);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+        }
+
+        #gameInfo {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        #healthBar {
+            width: 200px;
+            height: 20px;
+            background-color: #333;
+            border-radius: 10px;
+            margin-top: 5px;
+            overflow: hidden;
+        }
+
+        #healthFill {
+            height: 100%;
+            background-color: #4CAF50;
+            width: 100%;
+            transition: width 0.3s;
+        }
+
+        #playersInfo {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        .playerEntry {
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+        }
+
+        .playerColor {
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div id="gameInfo">
+        <div>Health: <span id="healthDisplay">100</span></div>
+        <div id="healthBar">
+            <div id="healthFill"></div>
+        </div>
+        <div>Score: <span id="scoreDisplay">0</span></div>
+        <div>Level: <span id="levelDisplay">Ocean</span></div>
+    </div>
+    <div id="playersInfo">
+        <h3>Players</h3>
+        <div id="playersList"></div>
+    </div>
+    <div id="startScreen">
+        <h1>Whale's Journey: Ocean to Amazon</h1>
+        <p>Help the whale navigate from the ocean to the Amazon river!</p>
+        <p>Use arrow keys or WASD to move the whale.</p>
+        <p>Collect fish for points and avoid obstacles.</p>
+        <p><strong>Multiplayer Mode:</strong> Play with friends!</p>
+        <button id="startButton">Start Journey</button>
+    </div>
+    <div id="gameOverScreen">
+        <h1>Game Over</h1>
+        <p>Your whale didn't make it to the Amazon.</p>
+        <p>Final Score: <span id="finalScore">0</span></p>
+        <button id="restartButton">Try Again</button>
+    </div>
+    <div id="winScreen">
+        <h1>Victory!</h1>
+        <p>Your whale has reached the Amazon River!</p>
+        <p>Final Score: <span id="winScore">0</span>
+        <p>Final Score: <span id="winScore">0</span></p>
+        <button id="playAgainButton">Play Again</button>
+    </div>
+
+    <script>
+        // Game variables
+        let canvas, ctx;
+        let playerId = null;
+        let socket = null;
+        let gameState = {
+            players: {},
+            obstacles: [],
+            fish: [],
+            level: 'Ocean',
+            isGameOver: false,
+            isGameWon: false,
+            isGameStarted: false,
+            levelIndex: 0
+        };
+
+        let backgroundPosition = 0;
+        let keys = {};
+
+        const levels = [
+            { name: 'Ocean', background: '#0077be', transitionPoint: 5000 },
+            { name: 'Coast', background: '#4682B4', transitionPoint: 10000 },
+            { name: 'River Mouth', background: '#5F9EA0', transitionPoint: 15000 },
+            { name: 'Amazon River', background: '#008080', transitionPoint: Infinity }
+        ];
+
+        // Initialize the game
+        function init() {
+            canvas = document.getElementById('gameCanvas');
+            ctx = canvas.getContext('2d');
+
+            // Set canvas size to window size
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+
+            // Event listeners
+            document.addEventListener('keydown', function (e) {
+                keys[e.key] = true;
+                sendMovement(e.key);
+            });
+
+            document.addEventListener('keyup', function (e) {
+                keys[e.key] = false;
+            });
+
+            document.getElementById('startButton').addEventListener('click', startGame);
+            document.getElementById('restartButton').addEventListener('click', restartGame);
+            document.getElementById('playAgainButton').addEventListener('click', restartGame);
+        }
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+
+        function connectToServer() {
+            socket = new WebSocket('ws://localhost:8765');
+
+            socket.onopen = function (e) {
+                console.log('Connected to game server');
+                socket.send(JSON.stringify({
+                    type: 'join'
+                }));
+            };
+
+            socket.onmessage = function (event) {
+                const data = JSON.parse(event.data);
+
+                if (data.type === 'joined') {
+                    playerId = data.playerId;
+                    console.log('Joined game with ID:', playerId);
+                }
+                else if (data.type === 'gameState') {
+                    gameState.players = data.state.players;
+                    gameState.obstacles = data.state.obstacles;
+                    gameState.fish = data.state.fish;
+
+                    // Update player info
+                    if (playerId && gameState.players[playerId]) {
+                        const myPlayer = gameState.players[playerId];
+                        updateDisplays(myPlayer);
+                    }
+
+                    // Update other players list
+                    updatePlayersList();
+                }
+                else if (data.type === 'gameOver') {
+                    gameState.isGameOver = true;
+                    document.getElementById('finalScore').textContent = data.score;
+                    document.getElementById('gameOverScreen').style.display = 'flex';
+                }
+                else if (data.type === 'gameWon') {
+                    gameState.isGameWon = true;
+                    document.getElementById('winScore').textContent = data.score;
+                    document.getElementById('winScreen').style.display = 'flex';
+                }
+            };
+
+            socket.onclose = function (event) {
+                console.log('Disconnected from game server');
+            };
+
+            socket.onerror = function (error) {
+                console.error('WebSocket error:', error);
+            };
+        }
+
+        function sendMovement(key) {
+            if (!socket || socket.readyState !== WebSocket.OPEN || !playerId) return;
+
+            let direction = null;
+            if (key === 'ArrowUp' || key === 'w' || key === 'W') direction = 'up';
+            else if (key === 'ArrowDown' || key === 's' || key === 'S') direction = 'down';
+            else if (key === 'ArrowLeft' || key === 'a' || key === 'A') direction = 'left';
+            else if (key === 'ArrowRight' || key === 'd' || key === 'D') direction = 'right';
+
+            if (direction) {
+                socket.send(JSON.stringify({
+                    type: 'move',
+                    playerId: playerId,
+                    direction: direction
+                }));
+            }
+        }
+
+        function startGame() {
+            document.getElementById('startScreen').style.display = 'none';
+            gameState.isGameStarted = true;
+            connectToServer();
+            gameLoop();
+        }
+
+        function restartGame() {
+            // Hide game over or win screen
+            document.getElementById('gameOverScreen').style.display = 'none';
+            document.getElementById('winScreen').style.display = 'none';
+
+            // Reconnect to server
+            if (socket) {
+                socket.close();
+            }
+            connectToServer();
+
+            // Reset game state
+            gameState.isGameOver = false;
+            gameState.isGameWon = false;
+
+            // Start game loop
+            gameLoop();
+        }
+
+        // In the updateDisplays function, add slowdown indicator
+        function updateDisplays(player) {
+            document.getElementById('healthDisplay').textContent = player.whale.health;
+            document.getElementById('scoreDisplay').textContent = player.score;
+            document.getElementById('levelDisplay').textContent = player.level;
+            
+            // Update health bar
+            const healthPercent = Math.max(0, player.whale.health);
+            document.getElementById('healthFill').style.width = healthPercent + '%';
+            
+            // Change health bar color based on health level
+            const healthFill = document.getElementById('healthFill');
+            if (healthPercent > 60) {
+                healthFill.style.backgroundColor = '#4CAF50'; // Green
+            } else if (healthPercent > 30) {
+                healthFill.style.backgroundColor = '#FFA500'; // Orange
+            } else {
+                healthFill.style.backgroundColor = '#F44336'; // Red
+            }
+            
+            // Show speed boost indicator if active
+            if (player.whale.boost_end_time) {
+                // Add or update speed boost indicator
+                let speedBoostIndicator = document.getElementById('speedBoostIndicator');
+                if (!speedBoostIndicator) {
+                    speedBoostIndicator = document.createElement('div');
+                    speedBoostIndicator.id = 'speedBoostIndicator';
+                    speedBoostIndicator.style.color = '#00BFFF';
+                    speedBoostIndicator.style.fontWeight = 'bold';
+                    document.getElementById('gameInfo').appendChild(speedBoostIndicator);
+                }
+                speedBoostIndicator.textContent = '🚀 SPEED BOOST ACTIVE!';
+            } else {
+                // Remove speed boost indicator if it exists
+                const speedBoostIndicator = document.getElementById('speedBoostIndicator');
+                if (speedBoostIndicator) {
+                    speedBoostIndicator.remove();
+                }
+            }
+            
+            // Show slowdown indicator if active
+            if (player.whale.slowdown_end_time) {
+                // Add or update slowdown indicator
+                let slowdownIndicator = document.getElementById('slowdownIndicator');
+                if (!slowdownIndicator) {
+                    slowdownIndicator = document.createElement('div');
+                    slowdownIndicator.id = 'slowdownIndicator';
+                    slowdownIndicator.style.color = '#FF6347'; // Tomato red
+                    slowdownIndicator.style.fontWeight = 'bold';
+                    document.getElementById('gameInfo').appendChild(slowdownIndicator);
+                }
+                slowdownIndicator.textContent = '🐌 SLOWED DOWN!';
+            } else {
+                // Remove slowdown indicator if it exists
+                const slowdownIndicator = document.getElementById('slowdownIndicator');
+                if (slowdownIndicator) {
+                    slowdownIndicator.remove();
+                }
+            }
+        }
+
+        function updatePlayersList() {
+            const playersList = document.getElementById('playersList');
+            playersList.innerHTML = '';
+
+            for (const id in gameState.players) {
+                const player = gameState.players[id];
+
+                // Skip players who are game over in the player list
+                if (player.isGameOver && id !== playerId) continue;
+
+                const playerEntry = document.createElement('div');
+                playerEntry.className = 'playerEntry';
+
+                const colorIndicator = document.createElement('div');
+                colorIndicator.className = 'playerColor';
+                colorIndicator.style.backgroundColor = player.whale.color;
+
+                const playerText = document.createElement('span');
+                if (id === playerId) {
+                    playerText.textContent = player.isGameOver ?
+                        `You: ${player.score} (Game Over)` :
+                        `You: ${player.score} - ${player.level} (${player.distance.toFixed(1)} km)`;
+                } else {
+                    playerText.textContent = `Player: ${player.score} - ${player.level} (${player.distance.toFixed(1)} km)`;
+                }
+
+                playerEntry.appendChild(colorIndicator);
+                playerEntry.appendChild(playerText);
+                playersList.appendChild(playerEntry);
+            }
+        }
+
+        function drawGame() {
+            if (!playerId || !gameState.players[playerId]) return;
+            
+            // Get current level index from player
+            const myPlayer = gameState.players[playerId];
+            const levelIndex = myPlayer.levelIndex;
+            
+            // Clear canvas
+            ctx.fillStyle = levels[levelIndex].background;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw background elements based on level
+            drawBackground(levelIndex);
+            
+            // Draw all players' whales
+            // In the drawGame function, add visual effect for slowed down whales
+            // Inside the loop that draws players' whales
+            for (const id in gameState.players) {
+                const player = gameState.players[id];
+                
+                // Skip rendering players who are game over
+                if (player.isGameOver) continue;
+                
+                // Only render players who are in the same level or within 1 km distance
+                const distanceDiff = Math.abs(player.distance - myPlayer.distance);
+                const sameLevel = player.levelIndex === myPlayer.levelIndex;
+                const nearbyDifferentLevel = Math.abs(player.levelIndex - myPlayer.levelIndex) === 1 && distanceDiff < 1;
+                
+                if (sameLevel || nearbyDifferentLevel) {
+                    const whale = player.whale;
+                    
+                    // Draw whale body
+                    ctx.fillStyle = whale.color;
+                    ctx.beginPath();
+                    ctx.ellipse(whale.x + whale.width / 2, whale.y + whale.height / 2,
+                              whale.width / 2, whale.height / 2, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Draw whale's spout
+                    ctx.fillStyle = 'white';
+                    ctx.beginPath();
+                    ctx.arc(whale.x + whale.width * 0.7, whale.y, 5, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Draw whale's eye
+                    ctx.fillStyle = 'black';
+                    ctx.beginPath();
+                    ctx.arc(whale.x + whale.width * 0.8, whale.y + whale.height * 0.3, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Draw whale's tail
+                    ctx.fillStyle = whale.color;
+                    ctx.beginPath();
+                    ctx.moveTo(whale.x, whale.y + whale.height / 2);
+                    ctx.lineTo(whale.x - 15, whale.y + whale.height / 2 - 15);
+                    ctx.lineTo(whale.x - 15, whale.y + whale.height / 2 + 15);
+                    ctx.closePath();
+                    ctx.fill();
+                    
+                    // Draw speed boost effect if active
+                    if (whale.boost_end_time) {
+                        // Draw speed lines behind the whale
+                        ctx.strokeStyle = 'rgba(0, 191, 255, 0.7)';
+                        ctx.lineWidth = 2;
+                        for (let j = 0; j < 5; j++) {
+                            const xOffset = 20 + j * 8;
+                            const yVariation = 5 * Math.sin(Date.now() / 100 + j);
+                            
+                            ctx.beginPath();
+                            ctx.moveTo(whale.x - xOffset, whale.y + whale.height / 2 - 10 + yVariation);
+                            ctx.lineTo(whale.x - xOffset - 10, whale.y + whale.height / 2 - 10 + yVariation);
+                            ctx.stroke();
+                            
+                            ctx.beginPath();
+                            ctx.moveTo(whale.x - xOffset, whale.y + whale.height / 2 + yVariation);
+                            ctx.lineTo(whale.x - xOffset - 10, whale.y + whale.height / 2 + yVariation);
+                            ctx.stroke();
+                            
+                            ctx.beginPath();
+                            ctx.moveTo(whale.x - xOffset, whale.y + whale.height / 2 + 10 + yVariation);
+                            ctx.lineTo(whale.x - xOffset - 10, whale.y + whale.height / 2 + 10 + yVariation);
+                            ctx.stroke();
+                        }
+                    }
+                    
+                    // Draw slowdown effect if active
+                    if (whale.slowdown_end_time) {
+                        // Draw ripple effect around the whale
+                        ctx.strokeStyle = 'rgba(255, 99, 71, 0.7)'; // Tomato red with transparency
+                        ctx.lineWidth = 2;
+                        
+                        // Draw concentric circles that pulse
+                        const pulseSize = 5 * Math.sin(Date.now() / 200);
+                        for (let i = 0; i < 3; i++) {
+                            ctx.beginPath();
+                            ctx.arc(
+                                whale.x + whale.width / 2, 
+                                whale.y + whale.height / 2, 
+                                whale.width / 2 + 10 + i * 8 + pulseSize, 
+                                0, 
+                                Math.PI * 2
+                            );
+                            ctx.stroke();
+                        }
+                    }
+                    
+                    // Draw player ID above whale if not the current player
+                    if (id !== playerId) {
+                        ctx.fillStyle = 'white';
+                        ctx.font = '12px Arial';
+                        ctx.textAlign = 'center';
+                        ctx.fillText('Player', whale.x + whale.width / 2, whale.y - 10);
+                    }
+                }
+            }
+
+            // Draw obstacles
+            for (let i = 0; i < gameState.obstacles.length; i++) {
+                const obstacle = gameState.obstacles[i];
+                ctx.fillStyle = obstacle.color;
+                if (levelIndex === 0) {
+                    // Draw rocks in ocean
+                    ctx.beginPath();
+                    ctx.arc(obstacle.x + obstacle.width / 2, obstacle.y + obstacle.height / 2,
+                        obstacle.width / 2, 0, Math.PI * 2);
+                    ctx.fill();
+                } else {
+                    // Draw logs in river
+                    ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+                }
+            }
+
+            // Draw fish
+            for (let i = 0; i < gameState.fish.length; i++) {
+                const fish = gameState.fish[i];
+                ctx.fillStyle = fish.color;
+                ctx.beginPath();
+                ctx.ellipse(fish.x + fish.width / 2, fish.y + fish.height / 2,
+                    fish.width / 2, fish.height / 2, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Draw fish tail
+                ctx.beginPath();
+                ctx.moveTo(fish.x, fish.y + fish.height / 2);
+                ctx.lineTo(fish.x - 10, fish.y);
+                ctx.lineTo(fish.x - 10, fish.y + fish.height);
+                ctx.closePath();
+                ctx.fill();
+            }
+        }
+
+        function drawBackground(levelIndex) {
+            // Increment background position for animation
+            backgroundPosition += 2;
+
+            // Draw water waves
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.lineWidth = 2;
+
+            for (let i = 0; i < 5; i++) {
+                const yPos = (i * 100 + backgroundPosition % 100) % canvas.height;
+                ctx.beginPath();
+                for (let x = 0; x < canvas.width; x += 20) {
+                    ctx.lineTo(x, yPos + Math.sin(x * 0.03) * 5);
+                }
+                ctx.stroke();
+            }
+
+            // Draw different background elements based on level
+            if (levelIndex === 0) {
+                // Ocean - draw some bubbles
+                for (let i = 0; i < 20; i++) {
+                    const x = (i * 100 + backgroundPosition * 0.5) % canvas.width;
+                    const y = 100 + Math.sin(i * 0.1) * 50 + canvas.height * 0.6;
+                    const size = 5 + Math.sin(i * 0.3) * 3;
+
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+                    ctx.beginPath();
+                    ctx.arc(x, y, size, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            } else if (levelIndex === 1) {
+                // Coast - draw shoreline
+                ctx.fillStyle = '#C2B280'; // Sand color
+                ctx.fillRect(0, canvas.height - 100, canvas.width, 100);
+
+                // Draw some rocks on shore
+                for (let i = 0; i < 8; i++) {
+                    const x = (i * 200 + backgroundPosition * 0.5) % canvas.width;
+                    ctx.fillStyle = '#808080';
+                    ctx.beginPath();
+                    ctx.arc(x, canvas.height - 80, 20, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            } else if (levelIndex >= 2) {
+                // River - draw riverbanks
+                ctx.fillStyle = '#228B22'; // Forest green
+                ctx.fillRect(0, 0, canvas.width, 100);
+                ctx.fillRect(0, canvas.height - 100, canvas.width, 100);
+
+                // Draw some trees on banks
+                for (let i = 0; i < 10; i++) {
+                    const x = (i * 150 + backgroundPosition * 0.5) % canvas.width;
+
+                    // Top bank trees
+                    ctx.fillStyle = '#654321'; // Tree trunk
+                    ctx.fillRect(x, 50, 10, 30);
+                    ctx.fillStyle = '#006400'; // Tree leaves
+                    ctx.beginPath();
+                    ctx.arc(x + 5, 40, 20, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // Bottom bank trees
+                    ctx.fillStyle = '#654321'; // Tree trunk
+                    ctx.fillRect(x + 75, canvas.height - 80, 10, 30);
+                    ctx.fillStyle = '#006400'; // Tree leaves
+                    ctx.beginPath();
+                    ctx.arc(x + 80, canvas.height - 90, 20, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+            // Draw progress indicator
+            if (playerId && gameState.players[playerId]) {
+                const myPlayer = gameState.players[playerId];
+                // Use distance instead of score for progress
+                const totalJourney = 20; // 20 km total journey
+                const progressWidth = (myPlayer.distance / totalJourney) * canvas.width;
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+                ctx.fillRect(0, 0, progressWidth, 5);
+
+                // Draw distance marker
+                ctx.fillStyle = 'white';
+                ctx.font = '12px Arial';
+                ctx.textAlign = 'left';
+                ctx.fillText(`${myPlayer.distance.toFixed(1)} km`, 10, 20);
+            }
+        }
+
+        function gameLoop() {
+            if (gameState.isGameOver || gameState.isGameWon) return;
+
+            drawGame();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Start the game when the page loads
+        window.onload = init;
+    </script>
+</body>
+
+</html>
+</body>
+
+</html>
