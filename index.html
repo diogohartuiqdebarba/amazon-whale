@@ -234,7 +234,8 @@
         }
 
         function connectToServer() {
-            socket = new WebSocket('ws://localhost:8765');
+            // Change from localhost to your Render WebSocket URL
+            socket = new WebSocket('wss://amazon-whale.onrender.com');
 
             socket.onopen = function (e) {
                 console.log('Connected to game server');
@@ -334,11 +335,11 @@
             document.getElementById('healthDisplay').textContent = player.whale.health;
             document.getElementById('scoreDisplay').textContent = player.score;
             document.getElementById('levelDisplay').textContent = player.level;
-            
+
             // Update health bar
             const healthPercent = Math.max(0, player.whale.health);
             document.getElementById('healthFill').style.width = healthPercent + '%';
-            
+
             // Change health bar color based on health level
             const healthFill = document.getElementById('healthFill');
             if (healthPercent > 60) {
@@ -348,7 +349,7 @@
             } else {
                 healthFill.style.backgroundColor = '#F44336'; // Red
             }
-            
+
             // Show speed boost indicator if active
             if (player.whale.boost_end_time) {
                 // Add or update speed boost indicator
@@ -368,7 +369,7 @@
                     speedBoostIndicator.remove();
                 }
             }
-            
+
             // Show slowdown indicator if active
             if (player.whale.slowdown_end_time) {
                 // Add or update slowdown indicator
@@ -424,54 +425,54 @@
 
         function drawGame() {
             if (!playerId || !gameState.players[playerId]) return;
-            
+
             // Get current level index from player
             const myPlayer = gameState.players[playerId];
             const levelIndex = myPlayer.levelIndex;
-            
+
             // Clear canvas
             ctx.fillStyle = levels[levelIndex].background;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
-            
+
             // Draw background elements based on level
             drawBackground(levelIndex);
-            
+
             // Draw all players' whales
             // In the drawGame function, add visual effect for slowed down whales
             // Inside the loop that draws players' whales
             for (const id in gameState.players) {
                 const player = gameState.players[id];
-                
+
                 // Skip rendering players who are game over
                 if (player.isGameOver) continue;
-                
+
                 // Only render players who are in the same level or within 1 km distance
                 const distanceDiff = Math.abs(player.distance - myPlayer.distance);
                 const sameLevel = player.levelIndex === myPlayer.levelIndex;
                 const nearbyDifferentLevel = Math.abs(player.levelIndex - myPlayer.levelIndex) === 1 && distanceDiff < 1;
-                
+
                 if (sameLevel || nearbyDifferentLevel) {
                     const whale = player.whale;
-                    
+
                     // Draw whale body
                     ctx.fillStyle = whale.color;
                     ctx.beginPath();
                     ctx.ellipse(whale.x + whale.width / 2, whale.y + whale.height / 2,
-                              whale.width / 2, whale.height / 2, 0, 0, Math.PI * 2);
+                        whale.width / 2, whale.height / 2, 0, 0, Math.PI * 2);
                     ctx.fill();
-                    
+
                     // Draw whale's spout
                     ctx.fillStyle = 'white';
                     ctx.beginPath();
                     ctx.arc(whale.x + whale.width * 0.7, whale.y, 5, 0, Math.PI * 2);
                     ctx.fill();
-                    
+
                     // Draw whale's eye
                     ctx.fillStyle = 'black';
                     ctx.beginPath();
                     ctx.arc(whale.x + whale.width * 0.8, whale.y + whale.height * 0.3, 3, 0, Math.PI * 2);
                     ctx.fill();
-                    
+
                     // Draw whale's tail
                     ctx.fillStyle = whale.color;
                     ctx.beginPath();
@@ -480,7 +481,7 @@
                     ctx.lineTo(whale.x - 15, whale.y + whale.height / 2 + 15);
                     ctx.closePath();
                     ctx.fill();
-                    
+
                     // Draw speed boost effect if active
                     if (whale.boost_end_time) {
                         // Draw speed lines behind the whale
@@ -489,45 +490,45 @@
                         for (let j = 0; j < 5; j++) {
                             const xOffset = 20 + j * 8;
                             const yVariation = 5 * Math.sin(Date.now() / 100 + j);
-                            
+
                             ctx.beginPath();
                             ctx.moveTo(whale.x - xOffset, whale.y + whale.height / 2 - 10 + yVariation);
                             ctx.lineTo(whale.x - xOffset - 10, whale.y + whale.height / 2 - 10 + yVariation);
                             ctx.stroke();
-                            
+
                             ctx.beginPath();
                             ctx.moveTo(whale.x - xOffset, whale.y + whale.height / 2 + yVariation);
                             ctx.lineTo(whale.x - xOffset - 10, whale.y + whale.height / 2 + yVariation);
                             ctx.stroke();
-                            
+
                             ctx.beginPath();
                             ctx.moveTo(whale.x - xOffset, whale.y + whale.height / 2 + 10 + yVariation);
                             ctx.lineTo(whale.x - xOffset - 10, whale.y + whale.height / 2 + 10 + yVariation);
                             ctx.stroke();
                         }
                     }
-                    
+
                     // Draw slowdown effect if active
                     if (whale.slowdown_end_time) {
                         // Draw ripple effect around the whale
                         ctx.strokeStyle = 'rgba(255, 99, 71, 0.7)'; // Tomato red with transparency
                         ctx.lineWidth = 2;
-                        
+
                         // Draw concentric circles that pulse
                         const pulseSize = 5 * Math.sin(Date.now() / 200);
                         for (let i = 0; i < 3; i++) {
                             ctx.beginPath();
                             ctx.arc(
-                                whale.x + whale.width / 2, 
-                                whale.y + whale.height / 2, 
-                                whale.width / 2 + 10 + i * 8 + pulseSize, 
-                                0, 
+                                whale.x + whale.width / 2,
+                                whale.y + whale.height / 2,
+                                whale.width / 2 + 10 + i * 8 + pulseSize,
+                                0,
                                 Math.PI * 2
                             );
                             ctx.stroke();
                         }
                     }
-                    
+
                     // Draw player ID above whale if not the current player
                     if (id !== playerId) {
                         ctx.fillStyle = 'white';
